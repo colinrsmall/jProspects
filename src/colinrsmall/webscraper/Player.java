@@ -20,3 +20,6 @@ public class Player {
     }
 
 }
+
+// each play object keeps track of # of plays by team in that game
+
