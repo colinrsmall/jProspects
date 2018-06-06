@@ -4,11 +4,21 @@ public class Assist extends Play
 {
     Player scorer;
     Player otherAssister;
+    Boolean emptyNet;
+    Boolean gameWinning;
+    Boolean insurance;
+    Boolean primary;
+    GameState gameState;
 
-    public Assist(int season, int period, int gameState, Boolean teamBehind, Player subject, Team teamFor, Team teamAgainst, Player scorer, Player otherAssister)
+    public Assist(int period, Player subject, String teamFor, String teamAgainst, String seasonName, int gameNumber, Player scorer, Player otherAssister, Boolean emptyNet, Boolean gameWinning, Boolean insurance, Boolean primary, GameState gameState)
     {
-        super(season, period, gameState, teamBehind, subject, teamFor, teamAgainst);
+        super(period, subject, teamFor, teamAgainst, seasonName, gameNumber);
         this.scorer = scorer;
         this.otherAssister = otherAssister;
+        this.emptyNet = emptyNet;
+        this.gameWinning = gameWinning;
+        this.insurance = insurance;
+        this.primary = primary;
+        this.gameState = gameState;
     }
 }

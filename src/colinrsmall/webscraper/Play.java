@@ -2,22 +2,20 @@ package colinrsmall.webscraper;
 
 class Play {
 
-    int season;
-    int period;
-    int gameState;
-    Boolean teamBehind;
-    Player subject;
-    Team teamFor; //Team the player was playing on
-    Team teamAgainst; //Team the player was playing against
+    private int period;
+    private Player subject;
+    private String teamFor; //Team the player was playing on
+    private String teamAgainst; //Team the player was playing against
+    private String seasonName;
+    private int gameNumber;
 
-    Play(int season, int period, int gameState, Boolean teamBehind, Player subject, Team teamFor, Team teamAgainst)
+    public Play(int period, Player subject, String teamFor, String teamAgainst, String seasonName, int gameNumber)
     {
-        this.season = season;
         this.period = period;
-        this.gameState = gameState;
-        this.teamBehind = teamBehind;
         this.subject = subject;
         this.teamFor = teamFor;
         this.teamAgainst = teamAgainst;
+        this.seasonName = seasonName;
+        this.gameNumber = gameNumber;
     }
 }
