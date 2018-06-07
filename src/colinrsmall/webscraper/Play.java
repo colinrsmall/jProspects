@@ -9,7 +9,7 @@ class Play {
     private String seasonName;
     private int gameNumber;
 
-    public Play(int period, Player subject, String teamFor, String teamAgainst, String seasonName, int gameNumber)
+    Play(int period, Player subject, String teamFor, String teamAgainst, String seasonName, int gameNumber)
     {
         this.period = period;
         this.subject = subject;
@@ -17,5 +17,35 @@ class Play {
         this.teamAgainst = teamAgainst;
         this.seasonName = seasonName;
         this.gameNumber = gameNumber;
+    }
+
+    public Player getSubject()
+    {
+        return subject;
+    }
+
+    public int getPeriod()
+    {
+        return period;
+    }
+
+    public String getTeamFor()
+    {
+        return teamFor;
+    }
+
+    public String getTeamAgainst()
+    {
+        return teamAgainst;
+    }
+
+    public String getSeasonName()
+    {
+        return seasonName;
+    }
+
+    public int getGameNumber()
+    {
+        return gameNumber;
     }
 }

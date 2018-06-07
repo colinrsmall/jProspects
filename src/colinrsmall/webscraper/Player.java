@@ -2,7 +2,7 @@ package colinrsmall.webscraper;
 
 import java.util.ArrayList;
 
-public class Player {
+class Player {
 
     private String firstName, lastName, position;
     private BirthdayDraftStatusContainer birthdayDraftStatus;
@@ -10,7 +10,7 @@ public class Player {
     private ArrayList<Penalty> penaltiesList;
     private ArrayList<Assist> assistsList;
 
-    public Player(String firstName, String lastName, String position, BirthdayDraftStatusContainer c){
+    Player(String firstName, String lastName, String position, BirthdayDraftStatusContainer c){
         this.firstName = firstName;
         this.lastName = lastName;
         this.position = position;
@@ -18,6 +18,12 @@ public class Player {
         goalsList = new ArrayList<>();
         penaltiesList = new ArrayList<>();
         assistsList = new ArrayList<>();
+    }
+
+    @Override
+    public String toString()
+    {
+        return this.firstName + " " + this.lastName + " - " + this.position;
     }
 
     public BirthdayDraftStatusContainer getBirthdayDraftStatus()
@@ -38,6 +44,36 @@ public class Player {
     public void addPenalty(Penalty p)
     {
         penaltiesList.add(p);
+    }
+
+    public String getFirstName()
+    {
+        return firstName;
+    }
+
+    public String getLastName()
+    {
+        return lastName;
+    }
+
+    public String getPosition()
+    {
+        return position;
+    }
+
+    public ArrayList<Goal> getGoalsList()
+    {
+        return goalsList;
+    }
+
+    public ArrayList<Penalty> getPenaltiesList()
+    {
+        return penaltiesList;
+    }
+
+    public ArrayList<Assist> getAssistsList()
+    {
+        return assistsList;
     }
 }
 

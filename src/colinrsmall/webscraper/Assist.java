@@ -21,4 +21,39 @@ public class Assist extends Play
         this.primary = primary;
         this.gameState = gameState;
     }
+
+    public Player getScorer()
+    {
+        return scorer;
+    }
+
+    public Player getOtherAssister()
+    {
+        return otherAssister;
+    }
+
+    public Boolean getEmptyNet()
+    {
+        return emptyNet;
+    }
+
+    public Boolean getGameWinning()
+    {
+        return gameWinning;
+    }
+
+    public Boolean getInsurance()
+    {
+        return insurance;
+    }
+
+    public Boolean getPrimary()
+    {
+        return primary;
+    }
+
+    public GameState getGameState()
+    {
+        return gameState;
+    }
 }
