@@ -9,6 +9,7 @@ class Player {
     private ArrayList<Goal> goalsList;
     private ArrayList<Penalty> penaltiesList;
     private ArrayList<Assist> assistsList;
+    private ArrayList<Integer> gamesList;
 
     Player(String firstName, String lastName, String position, BirthdayDraftStatusContainer c){
         this.firstName = firstName;
@@ -18,6 +19,7 @@ class Player {
         goalsList = new ArrayList<>();
         penaltiesList = new ArrayList<>();
         assistsList = new ArrayList<>();
+        gamesList = new ArrayList<>();
     }
 
     @Override
@@ -74,6 +76,11 @@ class Player {
     public ArrayList<Assist> getAssistsList()
     {
         return assistsList;
+    }
+
+    public ArrayList<Integer> getGamesList()
+    {
+        return gamesList;
     }
 }
 

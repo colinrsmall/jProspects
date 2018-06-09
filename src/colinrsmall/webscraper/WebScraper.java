@@ -1,6 +1,7 @@
 package colinrsmall.webscraper;
 
 import org.eclipse.collections.api.map.MutableMap;
+import org.eclipse.collections.impl.factory.Lists;
 import org.eclipse.collections.impl.factory.Maps;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -13,8 +14,10 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class WebScraper {
@@ -25,17 +28,44 @@ public class WebScraper {
     private static String outputFilePath = "out/csv/";
 
     private static MutableMap<String, Player> playersMap = Maps.mutable.empty();
+    private static ArrayList<String[]> gamesList;
 
     private static WebDriver playerPageDriver;
 
     public static void main(String[] args)
     {
         System.setProperty("webdriver.chrome.driver", "/Users/colinrsmall/Documents/GitHub/jProspects/src/colinrsmall/chromedriver/chromedriver");
-        scrape("WHL", WHL_2017_START, WHL_2017_END);
+        scrape("WHL", 1004776, WHL_2017_END);
         exportGoalsCSV();
         exportAssistsCSV();
         exportPenaltiesCSV();
+        exportPlayersCSV();
+        exportGamesCSV();
         System.out.println("DONE");
+    }
+
+    private static void exportGamesCSV()
+    {
+        PrintWriter writer;
+        try {
+            File out = new File(outputFilePath + "games.csv");
+            out.getParentFile().mkdirs();
+            out.createNewFile();
+            writer = new PrintWriter(out);
+            writer.write("Date, Season, Game Number, Game Code\n");
+            for( String[] game : gamesList )
+            {
+                StringBuilder line = new StringBuilder();
+                for( String string : game )
+                {
+                    line.append(string).append(",");
+                }
+                line.append("\n");
+                writer.write(line.toString());
+            }
+            writer.close();
+        }
+        catch (IOException e) { e.printStackTrace(); }
     }
 
     private static void exportGoalsCSV()
@@ -133,6 +163,34 @@ public class WebScraper {
         catch (IOException e) { e.printStackTrace(); }
     }
 
+    private static void exportPlayersCSV()
+    {
+        PrintWriter writer;
+        try {
+            File out = new File(outputFilePath + "players.csv");
+            out.getParentFile().mkdirs();
+            out.createNewFile();
+            writer = new PrintWriter(out);
+            writer.write("First Name,Last Name,Position,Birthday,Draft Status,Games List\n");
+            for (Player player : playersMap.toList()) {
+                String line = player.getFirstName() + "," +
+                        player.getLastName() + "," +
+                        player.getPosition() + "," +
+                        player.getBirthdayDraftStatus().getBirthday() + "," +
+                        player.getBirthdayDraftStatus().getDraftStatus() + ",";
+                StringBuilder gamesList = new StringBuilder();
+                for( int game: player.getGamesList() )
+                {
+                    gamesList.append(Integer.toString(game)).append(";");
+                }
+                line += gamesList.toString() + "\n";
+                writer.write(line);
+            }
+            writer.close();
+        }
+        catch (IOException e) { e.printStackTrace(); }
+    }
+
     private static void exportPenaltiesCSV()
     {
         PrintWriter writer;
@@ -173,7 +231,6 @@ public class WebScraper {
             }
             writer.close();
         }
-        catch(FileNotFoundException e){e.printStackTrace();}
         catch (IOException e) {
             e.printStackTrace();
         }
@@ -181,6 +238,7 @@ public class WebScraper {
 
     private static void scrape( String league, int firstGame, int lastGame )
     {
+        gamesList = new ArrayList<>();
         outputFilePath = "out/csv/" + league + "/" + firstGame + "to" + lastGame + "/";
         WebDriver gamePageDriver = new ChromeDriver();
         playerPageDriver = new ChromeDriver();
@@ -189,6 +247,7 @@ public class WebScraper {
 
         gameLoop:
         for( int i = firstGame; i <= lastGame; i++ ) {
+            System.out.println("Game " + (i - firstGame) + " out of " + (lastGame-firstGame));
             // Skip a bunch of unused game codes in the OHL
             if (league.equals("OHL") && (26597 < i && i > 999999))
                 continue;
@@ -197,29 +256,43 @@ public class WebScraper {
             Elements awaySkaters;
             Elements homeSkaters;
             Document parsedHTML;
+            String seasonName = "";
+            String gameDateString = "";
 
             // Try five times to get player stats
             for (int openAttempts = 0; true; openAttempts++) {
+                try {
+                    Thread.sleep(openAttempts * 10);
+                }
+                catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
                 gamePageDriver.get(gameURL);
                 String innerHTML = gamePageDriver.getPageSource();
                 parsedHTML = Jsoup.parse(innerHTML);
+                try{seasonName = consolidateSeasonName(parsedHTML.select("[data-reactid=\".0.0.0.3\"]").get(0).ownText(), league);}
+                catch (IndexOutOfBoundsException e){}
                 awaySkaters = parsedHTML.select("tbody[data-reactid=\".0.0.3.0.2.0.1.2.0.1\"] .table__tr--dark");
                 homeSkaters = parsedHTML.select("tbody[data-reactid=\".0.0.3.0.2.1.1.2.0.1\"] .table__tr--dark");
-                if (awaySkaters.size() != 0 || homeSkaters.size() != 0)
+                if (awaySkaters.size() != 0 || homeSkaters.size() != 0 || seasonName.length() != 0)
                     break;
                 if (openAttempts > 5)
                     continue gameLoop;
             }
 
-            String seasonName = consolidateSeasonName(parsedHTML.select("[data-reactid=\".0.0.0.3\"]").get(0).ownText(), league);
+            if( league.equals("WHL"))
+            {
+                gameDateString = parsedHTML.select("[data-reactid=\".0.0.0.4\"]").get(0).ownText().split(" - ")[2].split(",")[0];
+            }
+
             int gameNumber = Integer.parseInt(parsedHTML.select("[data-reactid=\".0.0.0.3\"]").get(0).ownText().split(" ")[2]);
             String homeTeamName = parsedHTML.select("[data-reactid=\".0.0.0.2\"]").get(0).attr("class").split(" ")[1].split("-")[4];
             String awayTeamName = parsedHTML.select("[data-reactid=\".0.0.0.0\"]").get(0).attr("class").split(" ")[1].split("-")[4];
             // Save players in the game to memory if they don't already exist
             for( Element playerElement : homeSkaters)
-                playerBuilder(playerElement, league);
+                playerBuilder(playerElement, league, i);
             for( Element playerElement : awaySkaters)
-                playerBuilder(playerElement, league);
+                playerBuilder(playerElement, league, i);
 
             // Saves all goals in the game to their respective players
             Element goalsTable = parsedHTML.select("[data-reactid=\".0.0.3.0.7\"]").first();
@@ -230,6 +303,8 @@ public class WebScraper {
             Element penaltyTable = parsedHTML.selectFirst("[data-reactid=\".0.0.3.0.8\"]");
             for( Element penaltyElement : penaltyTable.children().subList(1, penaltyTable.children().size()))
                 penaltyBuilder(penaltyElement, seasonName, gameNumber, homeTeamName, awayTeamName);
+
+            gamesList.add(new String[]{gameDateString, seasonName, Integer.toString(gameNumber), Integer.toString(i)});
         }
         gamePageDriver.close();
         playerPageDriver.close();
@@ -239,6 +314,8 @@ public class WebScraper {
     {
         //period, subject, teamFor, teamAgainst, seasonName, gameNumber, minutes, offsetting, major, misconduct, gameInfraction
         int period = Character.getNumericValue(penaltyElement.select("div").get(3).ownText().charAt(0));
+        if(penaltyElement.selectFirst("a").ownText().length() == 0)
+            return;
         String penaltyTakerName = nameFixer(penaltyElement.selectFirst("a").ownText());
         Player penaltyTaker = playersMap.get(penaltyTakerName);
         String teamFor = penaltyElement.selectFirst("div").attr("class").split(" ")[1].split("-")[3];
@@ -267,22 +344,23 @@ public class WebScraper {
         catch(NullPointerException ignored){}
     }
 
-    private static void playerBuilder( Element playerElement, String league )
+    private static void playerBuilder( Element playerElement, String league, int gameNumber )
     {
         Elements cells = playerElement.select("td");
         String position = cells.get(0).ownText();
         Element nameElement = cells.get(2).select("a").get(0);
-        String name = nameElement.ownText();
+        String nameRaw = nameElement.ownText();
+        String firstName = nameRaw.split(",")[1].split("-")[0].split(" /*")[1];
+        String lastName = nameRaw.split(",")[0];
+        String name = lastName + ", " + firstName;
         Player player = playersMap.get(name);
         if( player == null )
         {
             BirthdayDraftStatusContainer birthdayDraftStatusContainer = getBirthdayAndDraftStatus(league, nameElement.attr("href"));
-            String firstName = name.split(",")[1].split("-")[0].split(" /*")[1];
-            String lastName = name.split(",")[0];
-            name = lastName + ", " + firstName;
             player = new Player(firstName, lastName, position, birthdayDraftStatusContainer);
             playersMap.put(name, player);
         }
+        player.getGamesList().add(gameNumber);
     }
 
     private static String nameFixer( String name )
@@ -319,6 +397,7 @@ public class WebScraper {
         try{String primAssisterName = nameFixer(goalElement.select("span").get(3).selectFirst("a").ownText());
             primAssister = playersMap.get(primAssisterName);}
         catch(NullPointerException e){primAssister = null;}
+        catch(IndexOutOfBoundsException e){primAssister = null; secAssister = null;}
         try{String secAssisterName = nameFixer(goalElement.select("span").get(6).selectFirst("a").ownText());
             secAssister = playersMap.get(secAssisterName);}
         catch(NullPointerException e){secAssister = null;}
@@ -418,7 +497,8 @@ public class WebScraper {
         else{
             String birthdayText = parsedHTML.select("[data-reactid=\".0.0.0.0.2.3.1\"]").first().ownText();
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-            birthday = LocalDate.parse(birthdayText, formatter);
+            try{birthday = LocalDate.parse(birthdayText, formatter);}
+            catch (DateTimeException e){birthday = LocalDate.MIN;}
             try{
                 Element draftTable = parsedHTML.select("[data-reactid=\".0.0.0.0.2.6.1\"]").first();
                 String statusText = draftTable.select("div").get(1).ownText();

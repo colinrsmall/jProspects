@@ -17,21 +17,26 @@ public class DraftStatusContainer
         else{
             String[] textComponents = draftStatus.split(" ");
             drafted = true;
-            switch (league)
-            {
-                case "QMJHL": draftYear = Integer.parseInt(textComponents[3]);
-                              draftRound = Integer.parseInt(textComponents[5]);
-                              draftPick = Integer.parseInt(textComponents[6].replace("(", "").replace(")", "").replace("#", ""));
-                              draftTeam = textComponents[7];
-                              return;
-                case "WHL": // Do the below ops, WHL and OHL have the same format
-                case "OHL": draftYear = Integer.parseInt(textComponents[3].replace("(", "").replace(")", ""));
-                            draftRound = Integer.parseInt(textComponents[5]);
-                            draftPick = Integer.parseInt(textComponents[6].replace("(", "").replace(")", "").replace("#", ""));
-                            draftTeam = textComponents[2];
-                            return;
-                default: drafted = false;
+            try {
+                switch (league) {
+                    case "QMJHL":
+                        draftYear = Integer.parseInt(textComponents[3]);
+                        draftRound = Integer.parseInt(textComponents[5]);
+                        draftPick = Integer.parseInt(textComponents[6].replace("(", "").replace(")", "").replace("#", ""));
+                        draftTeam = textComponents[7];
+                        return;
+                    case "WHL": // Do the below ops, WHL and OHL have the same format
+                    case "OHL":
+                        draftYear = Integer.parseInt(draftStatus.split("\\(")[1].split("\\)")[0]);
+                        draftRound = Integer.parseInt(draftStatus.split(":")[1].split("\\(")[0].trim());
+                        draftPick = Integer.parseInt(draftStatus.split("\\#")[1].split("\\)")[0]);
+                        draftTeam = draftStatus.split(" - ")[1].split("\\(")[0].trim();
+                        return;
+                    default:
+                        drafted = false;
+                }
             }
+            catch (IndexOutOfBoundsException e){drafted = false;}
         }
     }
 
