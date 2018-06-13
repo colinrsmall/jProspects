@@ -20,10 +20,10 @@ public class DraftStatusContainer
             try {
                 switch (league) {
                     case "QMJHL":
-                        draftYear = Integer.parseInt(textComponents[3]);
-                        draftRound = Integer.parseInt(textComponents[5]);
-                        draftPick = Integer.parseInt(textComponents[6].replace("(", "").replace(")", "").replace("#", ""));
-                        draftTeam = textComponents[7];
+                        draftYear = Integer.parseInt(textComponents[2].split(",")[0]);
+                        draftRound = Integer.parseInt(textComponents[4]);
+                        draftPick = Integer.parseInt(textComponents[5].replace("(", "").replace(")", "").replace("#", ""));
+                        draftTeam = textComponents[6];
                         return;
                     case "WHL": // Do the below ops, WHL and OHL have the same format
                     case "OHL":

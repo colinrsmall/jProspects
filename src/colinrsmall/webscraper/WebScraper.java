@@ -9,6 +9,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeOptions;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -19,11 +20,18 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class WebScraper {
 
     private static final int WHL_2017_START = 1014621;
     private static final int WHL_2017_END = 1015412;
+    private static final int WHL_2008_END = 1004776;
+    private static final int QMJHL_2017_START = 25784;
+    private static final int QMJHL_2018_END = 26127;
+    //WHL - After 1013620 the season notation changes
+    //WHL - After 24644 the date line changes
 
     private static String outputFilePath = "out/csv/";
 
@@ -35,7 +43,8 @@ public class WebScraper {
     public static void main(String[] args)
     {
         System.setProperty("webdriver.chrome.driver", "/Users/colinrsmall/Documents/GitHub/jProspects/src/colinrsmall/chromedriver/chromedriver");
-        scrape("WHL", 1004776, WHL_2017_END);
+        //scrape("QMJHL", 5213, QMJHL_2018_END);
+        scrape("OHL", 6147, 23134);
         exportGoalsCSV();
         exportAssistsCSV();
         exportPenaltiesCSV();
@@ -240,19 +249,21 @@ public class WebScraper {
     {
         gamesList = new ArrayList<>();
         outputFilePath = "out/csv/" + league + "/" + firstGame + "to" + lastGame + "/";
-        WebDriver gamePageDriver = new ChromeDriver();
-        playerPageDriver = new ChromeDriver();
+        final ChromeOptions chromeOptions = new ChromeOptions();
+        chromeOptions.addArguments("--headless");
+        WebDriver gamePageDriver = new ChromeDriver(chromeOptions);
+        playerPageDriver = new ChromeDriver(chromeOptions);
         String urlBase = getURLBase(league);
         playersMap = playersMap.newEmpty();
 
         gameLoop:
-        for( int i = firstGame; i <= lastGame; i++ ) {
-            System.out.println("Game " + (i - firstGame) + " out of " + (lastGame-firstGame));
+        for( int gameCode = firstGame; gameCode <= lastGame; gameCode++ ) {
+            System.out.println("Game " + (gameCode - firstGame) + " out of " + (lastGame-firstGame) + " - " + ((long)(gameCode-firstGame)/(lastGame-firstGame)) + "% done");
             // Skip a bunch of unused game codes in the OHL
-            if (league.equals("OHL") && (26597 < i && i > 999999))
+            if (league.equals("OHL") && (26597 < gameCode && gameCode > 999999))
                 continue;
 
-            String gameURL = urlBase + "/gamecentre/" + i + "/boxscore";
+            String gameURL = urlBase + "/gamecentre/" + gameCode + "/boxscore";
             Elements awaySkaters;
             Elements homeSkaters;
             Document parsedHTML;
@@ -280,31 +291,30 @@ public class WebScraper {
                     continue gameLoop;
             }
 
-            if( league.equals("WHL"))
-            {
-                gameDateString = parsedHTML.select("[data-reactid=\".0.0.0.4\"]").get(0).ownText().split(" - ")[2].split(",")[0];
-            }
-
+            Pattern datePattern = Pattern.compile("([A-z]{3,} \\d{1,2}[a-z]{2} \\d{4})");
+            Matcher dateMatcher;
+            dateMatcher = datePattern.matcher(parsedHTML.select("[data-reactid=\".0.0.0.4\"]").get(0).ownText());
+            while(dateMatcher.find()) gameDateString = dateMatcher.group();
             int gameNumber = Integer.parseInt(parsedHTML.select("[data-reactid=\".0.0.0.3\"]").get(0).ownText().split(" ")[2]);
             String homeTeamName = parsedHTML.select("[data-reactid=\".0.0.0.2\"]").get(0).attr("class").split(" ")[1].split("-")[4];
             String awayTeamName = parsedHTML.select("[data-reactid=\".0.0.0.0\"]").get(0).attr("class").split(" ")[1].split("-")[4];
             // Save players in the game to memory if they don't already exist
             for( Element playerElement : homeSkaters)
-                playerBuilder(playerElement, league, i);
+                playerBuilder(playerElement, league, gameCode);
             for( Element playerElement : awaySkaters)
-                playerBuilder(playerElement, league, i);
+                playerBuilder(playerElement, league, gameCode);
 
             // Saves all goals in the game to their respective players
             Element goalsTable = parsedHTML.select("[data-reactid=\".0.0.3.0.7\"]").first();
             for( Element goalElement : goalsTable.children().subList(1, goalsTable.children().size()) )
-                goalBuilder(goalElement, seasonName, gameNumber, homeTeamName, awayTeamName);
+                goalBuilder(goalElement, seasonName, gameCode, homeTeamName, awayTeamName);
 
             // Saves all penalties in the game to their respective players
             Element penaltyTable = parsedHTML.selectFirst("[data-reactid=\".0.0.3.0.8\"]");
             for( Element penaltyElement : penaltyTable.children().subList(1, penaltyTable.children().size()))
-                penaltyBuilder(penaltyElement, seasonName, gameNumber, homeTeamName, awayTeamName);
+                penaltyBuilder(penaltyElement, seasonName, gameCode, homeTeamName, awayTeamName);
 
-            gamesList.add(new String[]{gameDateString, seasonName, Integer.toString(gameNumber), Integer.toString(i)});
+            gamesList.add(new String[]{gameDateString, seasonName, Integer.toString(gameNumber), Integer.toString(gameCode)});
         }
         gamePageDriver.close();
         playerPageDriver.close();
@@ -350,7 +360,7 @@ public class WebScraper {
         String position = cells.get(0).ownText();
         Element nameElement = cells.get(2).select("a").get(0);
         String nameRaw = nameElement.ownText();
-        String firstName = nameRaw.split(",")[1].split("-")[0].split(" /*")[1];
+        String firstName = nameRaw.split(",")[1].split(" - ")[0].split(" \\*")[0].trim();
         String lastName = nameRaw.split(",")[0];
         String name = lastName + ", " + firstName;
         Player player = playersMap.get(name);
@@ -365,6 +375,8 @@ public class WebScraper {
 
     private static String nameFixer( String name )
     {
+        if(name.equals("Jordan Ty Fournier"))
+            return "Fournier, Jordan Ty";
         String[] nameParts = name.split(" ");
         String firstName = nameParts[0];
         StringBuilder lastName = new StringBuilder(nameParts[1]);
@@ -388,7 +400,7 @@ public class WebScraper {
         Boolean gameWinning = false;
         Boolean penaltyShot = false;
 
-        period = Character.getNumericValue(goalElement.select("div").get(3).ownText().charAt(0));
+        period = Arrays.asList(1, 2, 3).contains(Character.getNumericValue(goalElement.select("div").get(3).ownText().charAt(0))) ? Character.getNumericValue(goalElement.select("div").get(3).ownText().charAt(0)) : 4;
         String scorerName = nameFixer(goalElement.select("div").get(5).selectFirst("a").ownText());
         scorer = playersMap.get(scorerName);
         teamFor = goalElement.selectFirst("div").attr("class").split(" ")[1].split("-")[4];
@@ -414,7 +426,8 @@ public class WebScraper {
                 case "Game Winning": gameWinning = true; break;
             }
         }
-        scorer.addGoal(new Goal(period, scorer, teamFor, teamAgainst, seasonName, gameNumber, primAssister, secAssister, emptyNet, gameWinning, insurance, gameState, penaltyShot));
+        try{scorer.addGoal(new Goal(period, scorer, teamFor, teamAgainst, seasonName, gameNumber, primAssister, secAssister, emptyNet, gameWinning, insurance, gameState, penaltyShot));}
+        catch (NullPointerException e){System.out.println("Error: Player " + scorerName + " not found in PlayersMap. May be goalie or other issue.");return;}
         if(primAssister != null)
             primAssister.addAssist(new Assist(period, primAssister, teamFor, teamAgainst, seasonName, gameNumber, scorer, secAssister, emptyNet, gameWinning, insurance, true, gameState));
         if(secAssister != null)
@@ -427,7 +440,7 @@ public class WebScraper {
         {
             case "OHL": return "http://www.ontariohockeyleague.com";
             case "WHL": return "http://www.whl.ca";
-            case "QMJHL": return "http://www.theqmjhl.ca";
+            case "QMJHL": return "http://theqmjhl.ca";
             //default: throw new Exception("Invalid league name: " + league + " is not one of OHL, WHL, QMJHL");
         }
         return ""; //Will throw exception in Selenium if nothing is returned, but this shouldn't happen
@@ -435,12 +448,11 @@ public class WebScraper {
 
     private static String consolidateSeasonName(String season, String league)
     {
-        switch (league){
-            case "OHL": return season.split(" - ")[1].split(" ")[0];
-            case "WHL": return season.split(" - ")[1] + "-" + season.split(" - ")[2].split(" ")[0];
-            case "QMJHL": return season.split(" - ")[1].split(" /| ")[0];
-            default: return "";
-        }
+        Pattern seasonPattern = Pattern.compile("(\\d{4}\\s?-\\s?\\d{2,4})");
+        Matcher seasonMatcher = seasonPattern.matcher(season);
+        String seasonName = "";
+        while(seasonMatcher.find()){seasonName=seasonMatcher.group(0);}
+        return seasonName;
     }
 
     private static BirthdayDraftStatusContainer getBirthdayAndDraftStatus( String league, String href)
@@ -450,13 +462,14 @@ public class WebScraper {
         String innerHTML = playerPageDriver.getPageSource();
         Elements parsedHTML = Jsoup.parse(innerHTML).select("body").first().children();
         // Check to wait for the page to fully load
-        while(parsedHTML.select("[data-reactid=\".0.0.0.0.2.3.1\"]").first() == null)
+        while(((( league.equals("WHL") || league.equals("OHL") ) && parsedHTML.select("[data-reactid=\".0.0.0.0.2.3.1\"]").first() == null) ) || (league.equals("QMJHL") && parsedHTML.select(".info-con-table01").first().selectFirst("td") == null))
         {
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+            playerPageDriver.get(playerPageDriver.getCurrentUrl());
             innerHTML = playerPageDriver.getPageSource();
             parsedHTML = Jsoup.parse(innerHTML).select("body").first().children();
         }
@@ -471,10 +484,14 @@ public class WebScraper {
                 Element qmjhlPlayerPanel = parsedHTML.select(".info-con-table01").first();
                 Element row = qmjhlPlayerPanel.select("tr").get(2);
                 String birthdayText = row.selectFirst("span").ownText();
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-                birthday = LocalDate.parse(birthdayText, formatter);
+                if(birthdayText.equals("0000-00-00"))
+                    birthday = LocalDate.MIN;
+                else{
+                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+                    birthday = LocalDate.parse(birthdayText, formatter);
+                }
             }
-            catch( IndexOutOfBoundsException e )
+            catch( Exception e )
             {
                 birthday = LocalDate.MIN;
             }
@@ -488,7 +505,7 @@ public class WebScraper {
                 else
                     draftStatus = new DraftStatusContainer(statusText, league);
             }
-            catch ( IndexOutOfBoundsException e )
+            catch ( Exception e )
             {
                 draftStatus = new DraftStatusContainer("Undrafted", league);
             }
