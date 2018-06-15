@@ -1,7 +1,6 @@
 package colinrsmall.webscraper;
 
 import org.eclipse.collections.api.map.MutableMap;
-import org.eclipse.collections.impl.factory.Lists;
 import org.eclipse.collections.impl.factory.Maps;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -11,10 +10,9 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.*;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -44,7 +42,7 @@ public class WebScraper {
     {
         System.setProperty("webdriver.chrome.driver", "/Users/colinrsmall/Documents/GitHub/jProspects/src/colinrsmall/chromedriver/chromedriver");
         //scrape("QMJHL", 5213, QMJHL_2018_END);
-        scrape("OHL", 6147, 23134);
+        scrape(args[0], Integer.parseInt(args[1]), Integer.parseInt(args[2]));
         exportGoalsCSV();
         exportAssistsCSV();
         exportPenaltiesCSV();
@@ -60,7 +58,7 @@ public class WebScraper {
             File out = new File(outputFilePath + "games.csv");
             out.getParentFile().mkdirs();
             out.createNewFile();
-            writer = new PrintWriter(out);
+            writer = new PrintWriter(new FileOutputStream(out, true));
             writer.write("Date, Season, Game Number, Game Code\n");
             for( String[] game : gamesList )
             {
@@ -84,7 +82,7 @@ public class WebScraper {
             File out = new File(outputFilePath + "goals.csv");
             out.getParentFile().mkdirs();
             out.createNewFile();
-            writer = new PrintWriter(out);
+            writer = new PrintWriter(new FileOutputStream(out, true));
             writer.write("First Name,Last Name,Position,Team For,Team Against,Season,Game Number,Period,Game State,Primary Assister,Secondary Assister,Empty Net,Game Winning,Insurance\n");
             for (Player player : playersMap.toList()) {
                 for (Goal goal : player.getGoalsList()) {
@@ -131,7 +129,7 @@ public class WebScraper {
             File out = new File(outputFilePath + "assists.csv");
             out.getParentFile().mkdirs();
             out.createNewFile();
-            writer = new PrintWriter(out);
+            writer = new PrintWriter(new FileOutputStream(out, true));
             writer.write("First Name,Last Name,Position,Team For,Team Against,Season,Game Number,Period,Game State,Scorer,Other Assister,Empty Net,Game Winning,Insurance\n");
             for (Player player : playersMap.toList()) {
                 for (Assist assist : player.getAssistsList()) {
@@ -179,7 +177,7 @@ public class WebScraper {
             File out = new File(outputFilePath + "players.csv");
             out.getParentFile().mkdirs();
             out.createNewFile();
-            writer = new PrintWriter(out);
+            writer = new PrintWriter(new FileOutputStream(out, true));
             writer.write("First Name,Last Name,Position,Birthday,Draft Status,Games List\n");
             for (Player player : playersMap.toList()) {
                 String line = player.getFirstName() + "," +
@@ -207,7 +205,7 @@ public class WebScraper {
             File out = new File(outputFilePath + "penalties.csv");
             out.getParentFile().mkdirs();
             out.createNewFile();
-            writer = new PrintWriter(out);
+            writer = new PrintWriter(new FileOutputStream(out, true));
             writer.write("First Name,Last Name,Position,TeamFor,TeamAgainst,Season,GameNumber,Period,Minutes,PenaltyName,PenaltyType,Offsetting\n");
             for (Player player : playersMap.toList()) {
                 for (Penalty penalty : player.getPenaltiesList()) {
@@ -258,7 +256,8 @@ public class WebScraper {
 
         gameLoop:
         for( int gameCode = firstGame; gameCode <= lastGame; gameCode++ ) {
-            System.out.println("Game " + (gameCode - firstGame) + " out of " + (lastGame-firstGame) + " - " + ((long)(gameCode-firstGame)/(lastGame-firstGame)) + "% done");
+            NumberFormat formatter = new DecimalFormat("#.#####");
+            System.out.println("Game " + (gameCode - firstGame) + " out of " + (lastGame-firstGame) + " - " + formatter.format((double)(gameCode-firstGame)/(lastGame-firstGame)) + "% done");
             // Skip a bunch of unused game codes in the OHL
             if (league.equals("OHL") && (26597 < gameCode && gameCode > 999999))
                 continue;
@@ -306,13 +305,19 @@ public class WebScraper {
 
             // Saves all goals in the game to their respective players
             Element goalsTable = parsedHTML.select("[data-reactid=\".0.0.3.0.7\"]").first();
-            for( Element goalElement : goalsTable.children().subList(1, goalsTable.children().size()) )
-                goalBuilder(goalElement, seasonName, gameCode, homeTeamName, awayTeamName);
+            try{
+                for( Element goalElement : goalsTable.children().subList(1, goalsTable.children().size()) )
+                    goalBuilder(goalElement, seasonName, gameCode, homeTeamName, awayTeamName);
+            }
+            catch(Exception e){System.out.println("Game is missing goal table, skipping"); continue;};
 
             // Saves all penalties in the game to their respective players
             Element penaltyTable = parsedHTML.selectFirst("[data-reactid=\".0.0.3.0.8\"]");
-            for( Element penaltyElement : penaltyTable.children().subList(1, penaltyTable.children().size()))
-                penaltyBuilder(penaltyElement, seasonName, gameCode, homeTeamName, awayTeamName);
+            try{
+                for( Element penaltyElement : penaltyTable.children().subList(1, penaltyTable.children().size()))
+                    penaltyBuilder(penaltyElement, seasonName, gameCode, homeTeamName, awayTeamName);
+            }
+            catch(Exception e){System.out.println("Game is missing penalty table, skipping");continue;}
 
             gamesList.add(new String[]{gameDateString, seasonName, Integer.toString(gameNumber), Integer.toString(gameCode)});
         }
