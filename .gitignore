@@ -55,7 +55,7 @@ cmake-build-release/
 *.iws
 
 # IntelliJ
-out/csv
+out/
 
 # mpeltonen/sbt-idea plugin
 .idea_modules/
