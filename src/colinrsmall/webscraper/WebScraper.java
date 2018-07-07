@@ -1,11 +1,13 @@
 package colinrsmall.webscraper;
 
+import okio.Timeout;
 import org.eclipse.collections.api.map.MutableMap;
 import org.eclipse.collections.impl.factory.Maps;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
@@ -18,6 +20,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -37,17 +40,22 @@ public class WebScraper {
     private static ArrayList<String[]> gamesList;
 
     private static WebDriver playerPageDriver;
+    private static int currentGameCode;
 
     public static void main(String[] args)
     {
-        System.setProperty("webdriver.chrome.driver", "/Users/colinrsmall/Documents/GitHub/jProspects/src/colinrsmall/chromedriver/chromedriver");
-        //scrape("QMJHL", 5213, QMJHL_2018_END);
-        scrape(args[0], Integer.parseInt(args[1]), Integer.parseInt(args[2]));
-        exportGoalsCSV();
-        exportAssistsCSV();
-        exportPenaltiesCSV();
-        exportPlayersCSV();
-        exportGamesCSV();
+        Scanner scanner = new Scanner(System.in);
+        //System.out.println("Enter chromedriver path:");
+        //String driverPath = scanner.next();
+        //System.setProperty("webdriver.chrome.driver", driverPath);
+        System.setProperty("webdriver.chrome.driver", "chromedriver");
+        System.out.println("Enter league:");
+        String league = scanner.next();
+        System.out.println("Enter first game:");
+        int firstGame = scanner.nextInt();
+        System.out.println("Enter last game:");
+        int lastGame = scanner.nextInt();
+        scrape(league, firstGame, lastGame);
         System.out.println("DONE");
     }
 
@@ -245,84 +253,116 @@ public class WebScraper {
 
     private static void scrape( String league, int firstGame, int lastGame )
     {
-        gamesList = new ArrayList<>();
-        outputFilePath = "out/csv/" + league + "/" + firstGame + "to" + lastGame + "/";
-        final ChromeOptions chromeOptions = new ChromeOptions();
-        chromeOptions.addArguments("--headless");
-        WebDriver gamePageDriver = new ChromeDriver(chromeOptions);
-        playerPageDriver = new ChromeDriver(chromeOptions);
-        String urlBase = getURLBase(league);
-        playersMap = playersMap.newEmpty();
+//        try {
+            gamesList = new ArrayList<>();
+            final ChromeOptions chromeOptions = new ChromeOptions();
+            chromeOptions.addArguments("--headless");
+            chromeOptions.addArguments("--no-sandbox");
+            chromeOptions.addArguments("--disable-dev-shm-usage");
+            WebDriver gamePageDriver = new ChromeDriver(chromeOptions);
+            playerPageDriver = new ChromeDriver(chromeOptions);
+            String urlBase = getURLBase(league);
+            playersMap = playersMap.newEmpty();
 
-        gameLoop:
-        for( int gameCode = firstGame; gameCode <= lastGame; gameCode++ ) {
-            NumberFormat formatter = new DecimalFormat("#.#####");
-            System.out.println("Game " + (gameCode - firstGame) + " out of " + (lastGame-firstGame) + " - " + formatter.format((double)(gameCode-firstGame)/(lastGame-firstGame)) + "% done");
-            // Skip a bunch of unused game codes in the OHL
-            if (league.equals("OHL") && (26597 < gameCode && gameCode > 999999))
-                continue;
+            for (currentGameCode = firstGame; currentGameCode <= lastGame; currentGameCode++) {
+                NumberFormat formatter = new DecimalFormat("#.#####");
+                System.out.println("Game " + (currentGameCode - firstGame) + " out of " + (lastGame - firstGame) + " - " + formatter.format((double) (currentGameCode - firstGame) / (lastGame - firstGame) * 100) + "% done - GameCode:" + currentGameCode);
+                // Skip a bunch of unused game codes in the OHL
+                if (league.equals("OHL") && (26597 < currentGameCode && currentGameCode > 999999))
+                    continue;
 
-            String gameURL = urlBase + "/gamecentre/" + gameCode + "/boxscore";
-            Elements awaySkaters;
-            Elements homeSkaters;
-            Document parsedHTML;
-            String seasonName = "";
-            String gameDateString = "";
+                String gameURL = urlBase + "/gamecentre/" + currentGameCode + "/boxscore";
+                Elements awaySkaters;
+                Elements homeSkaters;
+                Document parsedHTML;
+                String seasonName = "";
+                String gameDateString = "";
 
-            // Try five times to get player stats
-            for (int openAttempts = 0; true; openAttempts++) {
-                try {
-                    Thread.sleep(openAttempts * 10);
+                // Try five times to get player stats
+                for (int openAttempts = 0; openAttempts < 5; openAttempts++) {
+                    try {
+                        try {
+                            Thread.sleep(openAttempts * 10);
+                        }
+                        catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        try {
+                            gamePageDriver.get(gameURL);
+                        }
+                        catch (TimeoutException e) {
+                            gamePageDriver.get(gameURL);
+                        }
+                        String innerHTML = gamePageDriver.getPageSource();
+                        parsedHTML = Jsoup.parse(innerHTML);
+                        seasonName = consolidateSeasonName(parsedHTML.select("[data-reactid=\".0.0.0.3\"]").get(0).ownText(), league);
+                        awaySkaters = parsedHTML.select("tbody[data-reactid=\".0.0.3.0.2.0.1.2.0.2\"] .table__tr--dark");
+                        homeSkaters = parsedHTML.select("tbody[data-reactid=\".0.0.3.0.2.1.1.2.0.2\"] .table__tr--dark");
+
+                        Pattern datePattern = Pattern.compile("([A-z]{3,} \\d{1,2}[a-z]{2} \\d{4})");
+                        Matcher dateMatcher;
+                        dateMatcher = datePattern.matcher(parsedHTML.select("[data-reactid=\".0.0.0.4\"]").get(0).ownText());
+                        while (dateMatcher.find()) gameDateString = dateMatcher.group();
+                        int gameNumber = Integer.parseInt(parsedHTML.select("[data-reactid=\".0.0.0.3\"]").get(0).ownText().split(" ")[2]);
+                        String homeTeamName = parsedHTML.select("[data-reactid=\".0.0.0.2\"]").get(0).attr("class").split(" ")[1].split("-")[4];
+                        String awayTeamName = parsedHTML.select("[data-reactid=\".0.0.0.0\"]").get(0).attr("class").split(" ")[1].split("-")[4];
+                        // Save players in the game to memory if they don't already exist
+                        for (Element playerElement : homeSkaters)
+                            playerBuilder(playerElement, league, currentGameCode);
+                        for (Element playerElement : awaySkaters)
+                            playerBuilder(playerElement, league, currentGameCode);
+
+                        // Saves all goals in the game to their respective players
+                        Element goalsTable = parsedHTML.select("[data-reactid=\".0.0.3.0.7\"]").first();
+                        try {
+                            for (Element goalElement : goalsTable.children().subList(1, goalsTable.children().size()))
+                                goalBuilder(goalElement, seasonName, currentGameCode, homeTeamName, awayTeamName);
+                        }
+                        catch (Exception e) {
+                            System.out.println("Game is missing goal table, skipping");
+                            continue;
+                        }
+                        // Saves all penalties in the game to their respective players
+                        Element penaltyTable = parsedHTML.selectFirst("[data-reactid=\".0.0.3.0.8\"]");
+                        try {
+                            for (Element penaltyElement : penaltyTable.children().subList(1, penaltyTable.children().size()))
+                                penaltyBuilder(penaltyElement, seasonName, currentGameCode, homeTeamName, awayTeamName);
+                        }
+                        catch (Exception e) {
+                            System.out.println("Game is missing penalty table, skipping");
+                            continue;
+                        }
+                        gamesList.add(new String[]{gameDateString, seasonName, Integer.toString(gameNumber), Integer.toString(currentGameCode)});
+                        break;
+                    }
+                    catch(Exception e)
+                    {
+                        System.err.println("Error in game " + currentGameCode + " - Retrying " + openAttempts + " out of " + 5);
+                        System.err.println(e.getStackTrace());
+                    }
                 }
-                catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                gamePageDriver.get(gameURL);
-                String innerHTML = gamePageDriver.getPageSource();
-                parsedHTML = Jsoup.parse(innerHTML);
-                try{seasonName = consolidateSeasonName(parsedHTML.select("[data-reactid=\".0.0.0.3\"]").get(0).ownText(), league);}
-                catch (IndexOutOfBoundsException e){}
-                awaySkaters = parsedHTML.select("tbody[data-reactid=\".0.0.3.0.2.0.1.2.0.1\"] .table__tr--dark");
-                homeSkaters = parsedHTML.select("tbody[data-reactid=\".0.0.3.0.2.1.1.2.0.1\"] .table__tr--dark");
-                if (awaySkaters.size() != 0 || homeSkaters.size() != 0 || seasonName.length() != 0)
-                    break;
-                if (openAttempts > 5)
-                    continue gameLoop;
             }
-
-            Pattern datePattern = Pattern.compile("([A-z]{3,} \\d{1,2}[a-z]{2} \\d{4})");
-            Matcher dateMatcher;
-            dateMatcher = datePattern.matcher(parsedHTML.select("[data-reactid=\".0.0.0.4\"]").get(0).ownText());
-            while(dateMatcher.find()) gameDateString = dateMatcher.group();
-            int gameNumber = Integer.parseInt(parsedHTML.select("[data-reactid=\".0.0.0.3\"]").get(0).ownText().split(" ")[2]);
-            String homeTeamName = parsedHTML.select("[data-reactid=\".0.0.0.2\"]").get(0).attr("class").split(" ")[1].split("-")[4];
-            String awayTeamName = parsedHTML.select("[data-reactid=\".0.0.0.0\"]").get(0).attr("class").split(" ")[1].split("-")[4];
-            // Save players in the game to memory if they don't already exist
-            for( Element playerElement : homeSkaters)
-                playerBuilder(playerElement, league, gameCode);
-            for( Element playerElement : awaySkaters)
-                playerBuilder(playerElement, league, gameCode);
-
-            // Saves all goals in the game to their respective players
-            Element goalsTable = parsedHTML.select("[data-reactid=\".0.0.3.0.7\"]").first();
-            try{
-                for( Element goalElement : goalsTable.children().subList(1, goalsTable.children().size()) )
-                    goalBuilder(goalElement, seasonName, gameCode, homeTeamName, awayTeamName);
-            }
-            catch(Exception e){System.out.println("Game is missing goal table, skipping"); continue;};
-
-            // Saves all penalties in the game to their respective players
-            Element penaltyTable = parsedHTML.selectFirst("[data-reactid=\".0.0.3.0.8\"]");
-            try{
-                for( Element penaltyElement : penaltyTable.children().subList(1, penaltyTable.children().size()))
-                    penaltyBuilder(penaltyElement, seasonName, gameCode, homeTeamName, awayTeamName);
-            }
-            catch(Exception e){System.out.println("Game is missing penalty table, skipping");continue;}
-
-            gamesList.add(new String[]{gameDateString, seasonName, Integer.toString(gameNumber), Integer.toString(gameCode)});
-        }
-        gamePageDriver.close();
-        playerPageDriver.close();
+            gamePageDriver.close();
+            playerPageDriver.close();
+            outputFilePath = "out/csv/" + league + "/" + firstGame + "to" + currentGameCode + "/";
+            exportGoalsCSV();
+            exportAssistsCSV();
+            exportPenaltiesCSV();
+            exportPlayersCSV();
+            exportGamesCSV();
+//      }
+//        catch( Exception e )
+//        {
+//            System.err.println("Unexpected error: " + e);
+//            System.err.println("Saving current stats.");
+//            outputFilePath = "out/csv/" + league + "/" + firstGame + "to" + currentGameCode + "/";
+//            exportGoalsCSV();
+//            exportAssistsCSV();
+//            exportPenaltiesCSV();
+//            exportPlayersCSV();
+//            exportGamesCSV();
+//            scrape(league, currentGameCode++, lastGame);
+//        }
     }
 
     private static void penaltyBuilder(Element penaltyElement, String seasonName, int gameNumber, String homeTeamName, String awayTeamName)
@@ -357,6 +397,7 @@ public class WebScraper {
         //Surround in a try-catch statement to work around assigning penalties to goalies (who aren't added to PlayersMap)
         try{penaltyTaker.addPenalty(new Penalty(period, penaltyTaker, teamFor, teamAgainst, seasonName, gameNumber, minutes, offsetting, penaltyType, penaltyName));}
         catch(NullPointerException ignored){}
+        System.out.println("Built penalty " + penaltyName + " for " + penaltyTakerName);
     }
 
     private static void playerBuilder( Element playerElement, String league, int gameNumber )
@@ -369,8 +410,10 @@ public class WebScraper {
         String lastName = nameRaw.split(",")[0];
         String name = lastName + ", " + firstName;
         Player player = playersMap.get(name);
+        System.out.println("Getting status for: " + name);
         if( player == null )
         {
+            System.out.println("No player found for " + name + " - Creating player");
             BirthdayDraftStatusContainer birthdayDraftStatusContainer = getBirthdayAndDraftStatus(league, nameElement.attr("href"));
             player = new Player(firstName, lastName, position, birthdayDraftStatusContainer);
             playersMap.put(name, player);
@@ -437,6 +480,7 @@ public class WebScraper {
             primAssister.addAssist(new Assist(period, primAssister, teamFor, teamAgainst, seasonName, gameNumber, scorer, secAssister, emptyNet, gameWinning, insurance, true, gameState));
         if(secAssister != null)
             secAssister.addAssist(new Assist(period, secAssister, teamFor, teamAgainst, seasonName, gameNumber, scorer, primAssister, emptyNet, gameWinning, insurance, false, gameState));
+        System.out.println("Built goal for " + scorerName);
     }
 
     private static String getURLBase( String league )
@@ -463,10 +507,12 @@ public class WebScraper {
     private static BirthdayDraftStatusContainer getBirthdayAndDraftStatus( String league, String href)
     {
         String url = getURLBase(league) + href;
-        playerPageDriver.get(url);
+        try{ playerPageDriver.get(url); }
+        catch( TimeoutException error ){ playerPageDriver.get(url); }
         String innerHTML = playerPageDriver.getPageSource();
         Elements parsedHTML = Jsoup.parse(innerHTML).select("body").first().children();
         // Check to wait for the page to fully load
+        int count = 0;
         while(((( league.equals("WHL") || league.equals("OHL") ) && parsedHTML.select("[data-reactid=\".0.0.0.0.2.3.1\"]").first() == null) ) || (league.equals("QMJHL") && parsedHTML.select(".info-con-table01").first().selectFirst("td") == null))
         {
             try {
@@ -474,9 +520,12 @@ public class WebScraper {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            playerPageDriver.get(playerPageDriver.getCurrentUrl());
+            try{ playerPageDriver.get(playerPageDriver.getCurrentUrl()); }
+            catch( TimeoutException e ){ playerPageDriver.get(playerPageDriver.getCurrentUrl() ); }
             innerHTML = playerPageDriver.getPageSource();
             parsedHTML = Jsoup.parse(innerHTML).select("body").first().children();
+            count++;
+            if(count > 20) break;
         }
 
         LocalDate birthday;
@@ -522,7 +571,7 @@ public class WebScraper {
             try{birthday = LocalDate.parse(birthdayText, formatter);}
             catch (DateTimeException e){birthday = LocalDate.MIN;}
             try{
-                Element draftTable = parsedHTML.select("[data-reactid=\".0.0.0.0.2.6.1\"]").first();
+                Element draftTable = parsedHTML.select("[data-reactid=\".0.0.0.0.2.5.1\"]").first();
                 String statusText = draftTable.select("div").get(1).ownText();
                 if( !statusText.contains("NHL"))
                     draftStatus = new DraftStatusContainer("Undrafted", league);
